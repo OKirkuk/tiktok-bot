@@ -5,7 +5,7 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import yt_dlp
 
-TOKEN = os.environ.get("TOKEN")
+TOKEN = os.environs.get("TOKEN")
 app = Flask(__name__)
 @app.route('/')
 def home():
