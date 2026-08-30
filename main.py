@@ -9,61 +9,45 @@ class H(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.end_headers()
-        self.wfile.write(b"OK Bot is running")
+        self.wfile.write(b"OK")
     def log_message(self, *a): return
 
 def run_server():
     port = int(os.environ.get("PORT", 10000))
-    print(f"Starting fake server on port {port}")
     HTTPServer(('0.0.0.0', port), H).serve_forever()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("هلا عمر! دزلي رابط التيك توك وآني احمله الك بدون علامة.")
+    await update.message.reply_text("هلا عمر! دزلي رابط تيك توك")
 
 async def dl(update: Update, context: ContextTypes.DEFAULT_TYPE):
     url = update.message.text.strip()
-    if "tiktok.com" not in url:
-        return
+    if "tiktok.com" not in url: return
     m = await update.message.reply_text("⏳ جاري التحميل...")
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
-        r = requests.post("https://www.tikwm.com/api/", 
-            data={"url": url, "count": 12, "cursor": 0, "web": 1, "hd": 1},
-            headers=headers, timeout=30)
+        r = requests.post("https://www.tikwm.com/api/", data={"url": url, "count": 12, "cursor": 0, "web": 1, "hd": 1}, headers=headers, timeout=30)
         j = r.json()
-        print(f"API Response: {j.get('code')}")
-
         if j.get("code") == 0:
-            data = j.get("data", {})
-            v = data.get("hdplay") or data.get("play") or data.get("wmplay")
-            
+            v = j["data"].get("hdplay") or j["data"].get("play")
             if not v:
-                await m.edit_text("❌ الرابط فاضي، جرب رابط ثاني")
+                await m.edit_text("❌ ما لگيت الفيديو")
                 return
-
-            await m.edit_text("⏳ دا انزل الفيديو...")
-            # تحميل الفيديو ب User-Agent حتى ما ينحظر
-            video_bytes = requests.get(v, headers=headers, timeout=60).content
-            path = "/tmp/video.mp4"
-            with open(path, "wb") as f:
-                f.write(video_bytes)
-
-            caption = data.get("title", "")[:200]
-            await update.message.reply_video(video=open(path, "rb"), caption=caption)
+            await m.edit_text("⏳ دا انزله...")
+            data = requests.get(v, headers=headers, timeout=60).content
+            open("/tmp/v.mp4","wb").write(data)
+            await update.message.reply_video(open("/tmp/v.mp4","rb"), caption=j["data"].get("title","")[:200])
             await m.delete()
         else:
-            await m.edit_text(f"❌ فشل التحميل: {j.get('msg')}")
+            await m.edit_text("❌ فشل")
     except Exception as e:
-        print(f"Error: {e}")
-        await m.edit_text(f"صار خطأ: {e}")
+        await m.edit_text(f"خطأ: {e}")
 
 def main():
-    print("Bot starting...")
     threading.Thread(target=run_server, daemon=True).start()
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, dl))
-    print("Bot polling started!")
+    print("Bot started!")
     app.run_polling()
 
 if __name__ == "__main__":
