@@ -18,7 +18,7 @@ def run_server():
     HTTPServer(('0.0.0.0', port), H).serve_forever()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("هلا عمر! دزلي رابط التيك توك توك وآني احمله الك بدون علامة.")
+    await update.message.reply_text("هلا عمر! دزلي رابط التيك توك وآني احمله الك بدون علامة.")
 
 async def dl(update: Update, context: ContextTypes.DEFAULT_TYPE):
     url = update.message.text.strip()
@@ -26,15 +26,33 @@ async def dl(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     m = await update.message.reply_text("⏳ جاري التحميل...")
     try:
-        r = requests.post("https://www.tikwm.com/api/", data={"url": url, "count": 12, "cursor": 0, "web": 1, "hd": 1}, timeout=20)
+        headers = {"User-Agent": "Mozilla/5.0"}
+        r = requests.post("https://www.tikwm.com/api/", 
+            data={"url": url, "count": 12, "cursor": 0, "web": 1, "hd": 1},
+            headers=headers, timeout=30)
         j = r.json()
+        print(f"API Response: {j.get('code')}")
+
         if j.get("code") == 0:
-            v = j["data"].get("hdplay") or j["data"].get("play")
-            t = j["data"].get("title", "")
-            await update.message.reply_video(v, caption=t[:200])
+            data = j.get("data", {})
+            v = data.get("hdplay") or data.get("play") or data.get("wmplay")
+            
+            if not v:
+                await m.edit_text("❌ الرابط فاضي، جرب رابط ثاني")
+                return
+
+            await m.edit_text("⏳ دا انزل الفيديو...")
+            # تحميل الفيديو ب User-Agent حتى ما ينحظر
+            video_bytes = requests.get(v, headers=headers, timeout=60).content
+            path = "/tmp/video.mp4"
+            with open(path, "wb") as f:
+                f.write(video_bytes)
+
+            caption = data.get("title", "")[:200]
+            await update.message.reply_video(video=open(path, "rb"), caption=caption)
             await m.delete()
         else:
-            await m.edit_text("❌ فشل التحميل، جرب رابط ثاني")
+            await m.edit_text(f"❌ فشل التحميل: {j.get('msg')}")
     except Exception as e:
         print(f"Error: {e}")
         await m.edit_text(f"صار خطأ: {e}")
