@@ -17,7 +17,7 @@ def run_server():
     HTTPServer(('0.0.0.0', port), H).serve_forever()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("هلا عمر! دزلي رابط تيك توك")
+    await update.message.reply_text("هلا صديقي دزلي رابط تيك توك حته احمله الك")
 
 async def dl(update: Update, context: ContextTypes.DEFAULT_TYPE):
     url = update.message.text.strip()
@@ -34,7 +34,7 @@ async def dl(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if not v:
                 await m.edit_text("❌ ما لگيت الفيديو")
                 return
-            await m.edit_text("⏳ دا انزله...")
+            await m.edit_text("⏳ دا انزله لاضوج...")
             data = requests.get(v, headers=headers, timeout=60).content
             open("/tmp/v.mp4","wb").write(data)
             await update.message.reply_video(open("/tmp/v.mp4","rb"), caption=j["data"].get("title","")[:200])
