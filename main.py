@@ -28,7 +28,9 @@ async def dl(update: Update, context: ContextTypes.DEFAULT_TYPE):
         r = requests.post("https://www.tikwm.com/api/", data={"url": url, "count": 12, "cursor": 0, "web": 1, "hd": 1}, headers=headers, timeout=30)
         j = r.json()
         if j.get("code") == 0:
-            v = j["data"].get("hdplay") or j["data"].get("play")
+            v = j["data"].get("hdplay") or j["data"].get("play") or j["data"].get("wmplay")
+            if v and v.startswith("/"):
+                v = "https://www.tikwm.com" + v
             if not v:
                 await m.edit_text("❌ ما لگيت الفيديو")
                 return
@@ -47,7 +49,6 @@ def main():
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, dl))
-    print("Bot started!")
     app.run_polling()
 
 if __name__ == "__main__":
