@@ -1,10 +1,27 @@
-import os, json
+import os, json, threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import yt_dlp
 
-TOKEN = os.getenv("BOT_TOKEN")
+# --- هذا حتى يرضى Render ---
+class Handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is running")
+
+def run_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(('0.0.0.0', port), Handler)
+    server.serve_forever()
+
+threading.Thread(target=run_server, daemon=True).start()
+# ---------------------------
+
+TOKEN = os.getenv("BOT_TOKEN") or os.getenv("TOKEN")
 DB_FILE = "users.json"
+ADMIN_ID = 6351625764
 
 def load_users():
     try: return set(json.load(open(DB_FILE)))
@@ -18,37 +35,30 @@ users = load_users()
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     users.add(update.effective_user.id)
     save_users(users)
-    await update.message.reply_text("👋 هلا! دزلي رابط التيك توك وانزله الك بدون علامة مائية\n\nارسل /stats لمعرفة عدد المشتركين (للادمن فقط)")
+    await update.message.reply_text("أهلاً! دزلي رابط تيك توك وانا انزله بدون علامة مائية.")
 
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # خلي الايدي مالتك هنا
-    ADMIN_ID = 6351625764  # هذا ايدي افتراضي غيره لايديك
-    if update.effective_user.id == ADMIN_ID:
-        await update.message.reply_text(f"📊 عدد المشتركين: {len(users)}")
-    else:
-        await update.message.reply_text(f"📊 البوت بيه {len(users)} مشترك")
-
-async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    url = update.message.text
-    if "tiktok.com" not in url and "vt.tiktok.com" not in url:
+    if update.effective_user.id!= ADMIN_ID:
         return
-    
-    users.add(update.effective_user.id)
-    save_users(users)
-    
-    msg = await update.message.reply_text("⏳ جاري التحميل... ثواني")
+    await update.message.reply_text(f"عدد المشتركين: {len(users)}")
+
+async def download(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    url = update.message.text.strip()
+    if "tiktok.com" not in url:
+        return
+    msg = await update.message.reply_text("⏳ جاري التحميل...")
     try:
-        ydl_opts = {'format': 'mp4', 'quiet': True, 'no_warnings': True}
+        ydl_opts = {'format': 'mp4', 'outtmpl': 'video.mp4', 'quiet': True}
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            video_url = info['url']
-            await update.message.reply_video(video=video_url, caption="✅ تم التحميل @TikNowaterMarkBot")
-            await msg.delete()
+            ydl.download([url])
+        await update.message.reply_video(video=open('video.mp4', 'rb'))
+        await msg.delete()
+        os.remove('video.mp4')
     except Exception as e:
-        await msg.edit_text(f"❌ فشل: {e}\nجرب رابط ثاني")
+        await msg.edit_text(f"فشل التحميل: {e}")
 
 app = Application.builder().token(TOKEN).build()
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("stats", stats))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_link))
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, download))
 app.run_polling()
