@@ -1,3 +1,2 @@
-python-telegram-bot==20.7
-yt-dlp
-Flask
+python-telegram-bot==21.9
+requests
