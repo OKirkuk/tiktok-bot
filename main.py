@@ -1,84 +1,72 @@
 import os
-import threading
-import requests
 import telebot
+import yt_dlp
 from flask import Flask
+import threading
 
 # --- الاعدادات ---
 TOKEN = os.getenv("BOT_TOKEN")
 bot = telebot.TeleBot(TOKEN)
-
-# --- دالة اضافة المستخدمين (اذا ما عندك ريدس اتركها مثل ما هي) ---
-def redis_req(cmd):
-    # اذا انت تستخدم Upstash حط الكود مالك هنا
-    # اذا ما تحتاج احصائيات خليها ترجع 0
-    try:
-        import requests as req
-        url = os.getenv("REDIS_URL")
-        if not url:
-            return {"result": 0}
-        r = req.post(f"{url}", json=cmd, headers={"Authorization": f"Bearer {os.getenv('REDIS_TOKEN')}"}, timeout=5)
-        return r.json()
-    except:
-        return {"result": 0}
-
-def add_user(user_id):
-    try:
-        redis_req(["SADD", "users", str(user_id)])
-    except:
-        pass
-
-# --- اوامر البوت ---
-@bot.message_handler(commands=['start', 'id', 'stats'])
-def all_cmd(m):
-    add_user(m.from_user.id)
-
-    if m.text.startswith('/id'):
-        bot.reply_to(m, f"الايدي مالتك: {m.from_user.id}")
-        return
-
-    if m.text.startswith('/stats'):
-        res = redis_req(["SCARD", "users"])
-        count = res.get("result", 0)
-        bot.reply_to(m, f"📊 عدد مستخدمين البوت: {count}")
-        return
-
-    bot.reply_to(m, "هلا بيك 👋\nدزلي رابط التيك توك وانزله الك بدون علامة")
-
-# --- تحميل التيك توك ---
-@bot.message_handler(func=lambda m: True)
-def handle(m):
-    add_user(m.from_user.id)
-    url = m.text.strip()
-
-    if "tiktok.com" not in url and "vt.tiktok" not in url:
-        return
-
-    try:
-        msg = bot.reply_to(m, "جاري التحميل...")
-        api = f"https://tikwm.com/api/?url={url}"
-        data = requests.get(api, timeout=15).json()
-        video_url = data['data']['play']
-
-        bot.delete_message(m.chat.id, msg.message_id)
-        bot.send_video(m.chat.id, video_url, caption="تم التحميل @بوتك")
-
-    except Exception as e:
-        print(e)
-        bot.reply_to(m, "ما كدرت انزله، تأكد من الرابط صحيح")
-
-# --- حل مشكلة رندر (موقع وهمي حتى ما يفشل) ---
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Bot is Running!"
+    return "البوت شغال"
 
-def run_flask():
-    app.run(host='0.0.0.0', port=10000)
+# --- دالة التحميل ---
+def download_video(url):
+    # مجلد التحميلات
+    if not os.path.exists("downloads"):
+        os.makedirs("downloads")
+    
+    ydl_opts = {
+        'format': 'bestvideo+bestaudio/best', # اعلى جودة
+        'outtmpl': 'downloads/%(title)s.%(ext)s',
+        'quiet': True,
+        'no_warnings': True,
+    }
+    
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=True)
+        filename = ydl.prepare_filename(info)
+        return filename, info.get('title', 'فيديو')
 
-threading.Thread(target=run_flask, daemon=True).start()
+# --- اوامر البوت ---
+@bot.message_handler(commands=['start'])
+def start(message):
+    bot.reply_to(message, 
+        "هلا بيك 👋\n"
+        "دزلي رابط تيك توك او فيس بوك (ريلز - فيديو عادي - ستوري)\n"
+        "واني انزله الك بأعلى جودة"
+    )
+
+@bot.message_handler(func=lambda m: True)
+def handle_link(message):
+    url = message.text.strip()
+    
+    # نتأكد الرابط من تيك توك او فيس بوك
+    if "tiktok.com" in url or "facebook.com" in url or "fb.watch" in url or "fb.com" in url:
+        msg = bot.reply_to(message, "⏳ جاري التحميل بأعلى جودة، انتظر...")
+        try:
+            file_path, title = download_video(url)
+            
+            # نرسل الفيديو
+            with open(file_path, 'rb') as video:
+                bot.send_video(message.chat.id, video, caption=f"✅ تم التحميل\n{title}")
+            
+            # نمسح الفيديو من السيرفر حتى لا ينترس
+            os.remove(file_path)
+            bot.delete_message(message.chat.id, msg.message_id)
+            
+        except Exception as e:
+            bot.edit_message_text(f"❌ صار خطأ بالتحميل\nتأكد الرابط عام ومو خاص\n\nالخطأ: {e}", message.chat.id, msg.message_id)
+    else:
+        bot.reply_to(message, "دزلي رابط صحيح من تيك توك او فيس بوك بس")
 
 # --- تشغيل البوت ---
-print("Bot started...")
-bot.infinity_polling()
+def run_bot():
+    bot.infinity_polling()
+
+if __name__ == "__main__":
+    threading.Thread(target=run_bot).start()
+    app.run(host="0.0.0.0", port=8080)
